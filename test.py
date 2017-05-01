@@ -7,7 +7,7 @@ import random
 import classify_kb as classify
 import numpy as np
 #################
-
+flag = None
 def subfinder(mylist, pattern): 
     ''' given a list and pattern, the function finds the locations of the patterns'''
 
@@ -212,7 +212,9 @@ def run(user_input):
     It also asks the user for a creativity factor. It then gathers the suggestions and presents them to the user. If the user doesn't want the chord,
     it presents the next suggestion. If there are no suggestions left, it returns a string to print. If the user wants the chord, it returns a list of
     the user inputted chords with the new chord.'''
-
+    global flag
+    if flag == 'No more suggestions.':
+     return flag
 
     clf_major,clf_minor,clf_abs=readClassifiers()
     #try all chromatic keys
@@ -314,8 +316,9 @@ def run(user_input):
         if response == 'y': # if user wants the chord
             return user_input + [value] # append new chord to user inputted chords
 
-    return 'No more suggestions.' # return string of no suggestions available
-
+    print("Final Chords = ", user_input )
+    flag = 'No more suggestions.'
+    return flag # return string of no suggestions available
 
 
 while True: ## always run
