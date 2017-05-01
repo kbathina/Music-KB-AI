@@ -5,6 +5,7 @@ import collections
 from operator import itemgetter
 import random
 import classify_kb as classify
+import numpy as np
 #################
 
 def subfinder(mylist, pattern): 
@@ -20,22 +21,18 @@ def subfinder(mylist, pattern):
     return matches
 
 def suggestions_finder(chords, possible_key):
-    '''Given the chords and the possible keys, the function finds the suggestions
-    1. similar suggestions: find songs in the key, find songs with the pattern in it, suggest the next chord
-    2. creative suggestions: take all other songs, convert the chords to the chromatic scale, find the pattern
-        in the songs with the same relative difference, append next chord'''
-
     #similar
     similar_song_ids = matches[matches.key.isin(possible_key)].songID.tolist() # get list of similar song ids
     similar_idxs = [i for i in similar_song_ids if chords in data_chromatic[i]] # finds indexes in which user input pattern appears
 
-    # look through each song with pattern, split song by pattern, get next chord
-    similar_suggestions = [int(values.split('-')[1]) for ids in similar_idxs for values in data_chromatic[ids].split(chords)[1:] if values != '-' and len(values) > 0]
+        # look through each song with pattern, split song by pattern, get next chord
+    similar_suggestions = [int(values.split('-')[0]) for ids in similar_idxs for values in data_chromatic[ids].split(chords)[1:] if values != '-' and len(values) > 0]
 
     #creative relative
     creative_keys = list(set(chromatic.keys()) - set(possible_key))
     creative_song_ids = matches[matches.key.isin(creative_keys)].songID.tolist() # get list of creative song ids
-    split_chords = chords.split('-') # split chords 
+    split_chords = chords.split('-') # split chords
+    split_chords = split_chords[1:len(split_chords) - 1]
     ## finds difference, converts to str, combines to str sep by comma
     split_chords_difference = ',' + ','.join([str(int(j)-int(i)) for i, j in zip(split_chords[:-1], split_chords[1:])]) 
     creative_idxs = [i for i in creative_song_ids if split_chords_difference in data_difference_chromatic[i]]
@@ -48,7 +45,7 @@ def suggestions_finder(chords, possible_key):
     creative_suggestions = [x for x in creative_suggestions if len(x) > 0]
     # flatten lists
     creative_suggestions = [int(x) for sub in creative_suggestions for x in sub]
-    
+
     return similar_suggestions, creative_suggestions
 
 def check_valid(chord):
@@ -69,7 +66,7 @@ chromatic = { # chromatic scale conversion from notes to value
     'A':9,'A#':10,'Ab':8,
     'B': 11,'B#':0,'Bb':10,
     
-    'Cm': 12,'C#m': 2,'Cbm': 23,    
+    'Cm': 12,'C#m': 13,'Cbm': 23,    
     'Dm':14,'D#m':15,'Dbm':13,
     'Em':16,'E#m':17,'Ebm':15,
     'Fm':17,'F#m':18,'Fbm':16,
@@ -158,9 +155,9 @@ keys = { # scales for each key
 ################################################## reading,transforming data
 matches = pd.read_csv("matches.txt", sep = ',', names = ['artist', 'song', 'key', 'songID']) # songID and key
 data = pickle.load( open( "new_data.p", "rb" ) ) ## song chord data
-data_chromatic = {x:'-'.join([str(chromatic[a]) for a in y]) for x,y in data.items()} # converts data into string of numbers
+data_chromatic = {x:'-' + '-'.join([str(chromatic[a]) for a in y])+ '-' for x,y in data.items()}
 ## finding difference between chromatic chords
-data_difference_chromatic = {x:','+','.join([str(int(j)-int(i)) for i, j in zip(y.split('-')[:-1], y.split('-')[1:])]) for x,y in data_chromatic.items()}
+data_difference_chromatic = {x:','+','.join([str(int(j)-int(i)) for i, j in zip(y.split('-')[1:-1], y.split('-')[1:])]) for x,y in data_chromatic.items()}
 ##################################################
 
 ### printing info so that user knows how to input
@@ -217,11 +214,6 @@ def run(user_input):
     the user inputted chords with the new chord.'''
 
 
-    ######################################### machine learning to get list of keys
-    #########################################
-    #########################################
-    #########################################
-    #########################################
     clf_major,clf_minor,clf_abs=readClassifiers()
     #try all chromatic keys
     test_keys=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
@@ -247,7 +239,7 @@ def run(user_input):
 
     # user feedback on possible keys
     print("--------------------------------\nSome possible keys were found.")
-    possible_key = [x if input("Keep " + x + '?: (Y/N) ').lower() == 'y' else exit() for x in possible_key] # ask which keys the user wants to keep
+    possible_key = [x for x in possible_key if input("Keep " + x + '?: (Y/N) ').lower() == 'y'] # ask which keys the user wants to keep
     if input("Would you like to add any? (Y/N) ").lower() == 'y': # if user wants to add some
         key = input('What key would you like to add? (<key>/<blank>) ') # ask user for key or blank
         if type(key) == str and key.lower() == 'exit': exit() # exit() requested by user
@@ -273,7 +265,7 @@ def run(user_input):
             continue # continue to next iteration
 
 
-    chromatic_user_input = '-'.join(str(chromatic[x]) for x in user_input) # convert user input to string of numbers
+    chromatic_user_input = '-'+'-'.join(str(chromatic[x]) for x in user_input) + '-' # convert user input to string of numbers
     similar_suggestions,creative_suggestions = suggestions_finder(chromatic_user_input, possible_key) # find suggestions
 
     # if no cases available: drop the first chord from trial and try again
@@ -283,17 +275,22 @@ def run(user_input):
         similar_suggestions,creative_suggestions = suggestions_finder(chromatic_user_input, possible_key) # run again
 
     similar = collections.Counter(similar_suggestions) # get count dict of similar suggestions
+    similar = collections.Counter({i: similar[i] / float(len(similar_suggestions)) for i in similar.keys()}) # conver to proportions
     creative = collections.Counter(creative_suggestions) # get count dict of creative suggestions
-    creative = collections.Counter({x:creativity*y for x,y in creative.items()}) # factor count dict of creative suggestions by creativity
+    creative = collections.Counter({i: creative[i] / float(len(creative_suggestions)) for i in creative.keys()}) # convert to proportions
+    similar = collections.Counter({x:(1-creativity)*y for x,y in similar.items()}) # scale similar by (1 - creativity)
+    creative = collections.Counter({x:creativity*y for x,y in creative.items()}) # scale creative by (creativity)
     total_suggestions = creative+similar # sum count dicts
 
 
-    # return suggestion by finding the most common
+    # return suggestion by choosing randomly with probability proportion
     # convert chromatic to chord
     # if multiple chords, check which one appers most frequently in the possible keys
     notes = [note for key in possible_key for note in keys[key]] # make a list of all the notes in the keys
-    for suggestion in total_suggestions.most_common(): # start with most commonly occuring value
-        suggestion = suggestion[0] # get chord number
+    # choose each of the chords randomly with probabiliy = proportion
+    total_suggestions = np.random.choice(list(total_suggestions.keys()), len(total_suggestions), replace=False, p=list(total_suggestions.values()))
+
+    for suggestion in total_suggestions:  
         chromatic_value = reverse_chromatic[suggestion] # get possible list of chords
         freq_counts = [(x,notes.count(x)) for x in chromatic_value] # list of tuples of chord and count
         random.shuffle(freq_counts) # shuffle in case there is a tie
