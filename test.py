@@ -4,6 +4,7 @@ import pickle
 import collections
 from operator import itemgetter
 import random
+import classify_kb as classify
 #################
 
 def subfinder(mylist, pattern): 
@@ -199,7 +200,15 @@ user_input = [user_input[x] for x in range(len(user_input)) if x not in del_list
 if user_input != old_user_input: print('chords = ',user_input) # print chords
 ################################################## 
 
-
+def readClassifiers():
+    '''return classifiers for absolute distribution and major/minor relative distributions'''
+    with open('svm_major.pkl','rb') as f:
+        clf_major=pickle.load(f)
+    with open('svm_minor.pkl','rb') as f:
+        clf_minor=pickle.load(f)
+    with open('svm_absolute.pkl','rb') as f:
+        clf_abs=pickle.load(f)
+    return (clf_major,clf_minor,clf_abs)
 
 def run(user_input):
     '''given chords from user, the function finds the list of possible keys, it then asks the user to verify each one and suggest some of their own.
@@ -213,7 +222,28 @@ def run(user_input):
     #########################################
     #########################################
     #########################################
-    possible_key = ['D','A']
+    clf_major,clf_minor,clf_abs=readClassifiers()
+    #try all chromatic keys
+    test_keys=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B','Cm','C#m','Dm','D#m','Em','Fm','F#m','Gm','G#m','Am','A#m','Bm']
+    #returns sorted list of relative chromatic scores
+    scores=classify.test_chords(test_keys,user_input,chromatic,clf_major,clf_minor,first=False,last=False)
+    #returns sorted list of absolute chromatic scores
+    abs_scores=classify.test_song(user_input,chromatic,clf_abs,test_keys,first=False,last=False)
+    #combine scores together for predictions
+    final_scores=[]
+    for chord1 in scores:
+        for chord2 in abs_scores:
+            if chromatic[chord1[1]]==chromatic[chord2[1]]:
+                final_scores.append((chord1[0]*chord2[0],chord1[1])) #choose first representation by default
+    total=sum([score[0] for score in final_scores])
+    #turn final scores into readable format and normalize
+    final_scores=[(chord[1],chord[0]/total) for chord in sorted(final_scores,reverse=True)]
+    #print(scores)
+    #print(abs_scores)
+    print('\n'.join(tup[0]+", Confidence Score: "+str(tup[1]) for tup in final_scores[:5] if tup[1]>0))
+
+
+    possible_key = [key[0] for key in final_scores[:5]]
 
     # user feedback on possible keys
     print("--------------------------------\nSome possible keys were found.")
@@ -287,5 +317,4 @@ while True: ## always run
     elif type(response) == list: # if its a list
         print('chords = ',response) # print the new set of chords
         response = run(response) # run function again
-
 

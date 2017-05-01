@@ -8,6 +8,7 @@ import random
 def generate_features(songs,matches,chords,first=False,last=False,relative=False,major=False,minor=False):
     #generate features for each song in matches
     #relative flag transforms absolute chromatic scale [C..Bm] into relative scale [Root..Seventh Minor]
+    #applies to the prediction task over ALL 24 keys and to major/minor prediction
     feature_list=[]
     labels=[]
     matched_songs=[]
@@ -33,10 +34,10 @@ def generate_features(songs,matches,chords,first=False,last=False,relative=False
                 features.append(transform_chord(songs[song][-1],transform,chords))
             #append to parallel arrays
             feature_list.append(features)
-            labels.append(chords[root])
+            #labels.append(chords[root])
             #predict major/minor task
-            #if 'm' in root: labels.append(0)
-            #else: labels.append(1)
+            if 'm' in root: labels.append(0)
+            else: labels.append(1)
             matched_songs.append(song)
     print("last root",root,"last transform",transform)
     print("Length of feature vector: ",len(features))
@@ -169,8 +170,8 @@ def test_chords(test_keys,chord_list,chords,clf_major,clf_minor,first=False,last
     scores=[(tup[0][0][1],tup[1]) for tup in scores]
     return sorted(scores,reverse=True)
 
-def test_song(chord_list,chords,clf,chromatic,first=False,last=False):
-    '''test all of the chords in a song to predict the top result; takes a list containing all of the chords in the song, a list of all possible chords, a classifier for major chords and minor chords (may be the same), and first/last flags to include the first/last chord as a feature'''
+def test_song(chord_list,chords,clf,chromatic,first=False,last=False,mode=False):
+    '''test all of the chords in a song to predict the top result; takes a list containing all of the chords in the song, a list of all possible chords, a classifier for major chords and minor chords (may be the same), first/last flags to include the first/last chord as a feature, and a mode flag that can be set to true to do major/minor prediction'''
     scores=[] #holds our prediction probabilities
 
     item=relative_chords(chord_list,'C',chords) #relativize to C major
@@ -180,8 +181,12 @@ def test_song(chord_list,chords,clf,chromatic,first=False,last=False):
     if last:
         item.append(transform_chord(chord_list[-1],0,chords))
         
+
     #if 'm' in chord: #minor prediction
     scores=clf.predict_proba([item])[0]
+    #alternate for major/minor task
+    if mode: #return scores before final processing
+        return scores
     scores=[(scores[i],chromatic[i]) for i in range(len(scores))]
     #scores.append((clf_minor.predict_proba([item]),chord)) #predict
     #else:
@@ -203,7 +208,8 @@ def generate_diff_features(feature_list,labels,major_average,minor_average):
     return feature_list
 
 
-
+#comment out to run this program on its own
+'''
 #main section
 print("Reading in data...\n")
 
@@ -246,8 +252,8 @@ for song in matches:
 
 #generate list of features and labels
 print("Generating feature list...\n")
-feature_list,labels,data=generate_features(songs,new_matches,chords,first=False,last=False,relative=False,major=False,minor=False)
-#feature_list,labels,data,roots=generate_rel_features(songs,new_matches,chords,first=True,last=True,major=True,minor=False,relative=True)
+#feature_list,labels,data=generate_features(songs,new_matches,chords,first=False,last=False,relative=False,major=False,minor=False)
+feature_list,labels,data,roots=generate_rel_features(songs,new_matches,chords,first=False,last=False,major=False,minor=False,relative=True)
 print(len(feature_list),"out of",len(matches),"matched")
 #print(feature_list[-1],labels[-1],songs[data[-1]])
 
@@ -275,7 +281,7 @@ print(len(feature_list),"out of",len(matches),"matched")
 #split randomly into training set/testing set
 X_train,X_test,Y_train,Y_test=train_test_split(feature_list,labels,train_size=0.80)
 #print(len(X_train),"in training set",len(X_test),"in testing set")
-
+'''
 
 #perform cross-validation with SVM
 #clf=svm.SVC(kernel='linear',C=1)
@@ -411,6 +417,9 @@ absolute key score * relative score: 0.3885799035965888
 over all 24: 0.3793103448275862
 absolute key score * relative major/minor score: 0.4175009269558769
 over all 24: 0.41564701520207636
+
+2-part: major/minor then relative: 0.38524286243974787
+over all 24: 0.3659621802002225
 END UPDATE
 
 DECISION TREES:
@@ -427,7 +436,7 @@ With last chord: 0.452151335312
 With first and last chords: 0.43175074184
 '''
 
-
+'''
 #run SVM classifier
 #clf=svm.SVC(kernel='linear',C=1).fit(X_train,Y_train)
 #clf=svm.SVC(kernel='rbf',C=1000,gamma=0.001).fit(X_train,Y_train)
@@ -440,45 +449,66 @@ print("songs used for training set: ",len(train),";  songs used for testing set"
 #train SVM; training set filtered above
 #clf=svm.SVC(kernel='rbf',C=1000,gamma=0.001,probability=True).fit(feature_list,labels)
 #save classifier
-#with open('svm_absolute_fl.pkl','wb') as f:
+#with open('svm_mode.pkl','wb') as f:
 #    s=pickle.dump(clf,f)
 #exit()
 #read in classifier
-with open('svm.pkl','rb') as f:
+with open('svm_major.pkl','rb') as f:
     clf_major=pickle.load(f)
 
 #read in classifier
-with open('svm.pkl','rb') as f:
+with open('svm_minor.pkl','rb') as f:
     clf_minor=pickle.load(f)
 
 #read in classifier
 with open('svm_absolute.pkl','rb') as f:
     clf_abs=pickle.load(f)
 
+#read in classifier
+with open('svm_mode.pkl','rb') as f:
+    clf_mode=pickle.load(f)
+
 #predict one key per song
 print("created model, testing keys...")
 correct=0 #correct predictions
 try_all=False #flag to try all 24 chromatic positions; if false, only try chords in songs
+add_mode=False
 
 for songid in test:
 
     label=matches[songid]
     #print("songid: ",songid,"true label is: ",label)
     #NOTE: a lot of keys do not actually appear in the song (mistake on Ultimate Guitar data?)
-    if not try_all:
-        scores=test_chords(set(songs[songid]),songs[songid],chords,clf_major,clf_minor,first=False,last=False)
-    else: #try all 24 chromatic positions
-        scores=test_chords(chromatic,songs[songid],chords,clf_major,clf_minor,first=False,last=False)
+    if add_mode: #run mode classifier first to filter
+        mode=list(test_song(songs[songid],chords,clf_mode,chromatic,first=False,last=False,mode=True))
+        mode=mode.index(max(mode))
 
+    if not try_all:
+        test_keys=set(songs[songid])
+        #scores=test_chords(set(songs[songid]),songs[songid],chords,clf_major,clf_minor,first=False,last=False)
+    else: #try all 24 chromatic positions
+        test_keys=chromatic
+    #filter test_keys based on mode
+    if add_mode and mode: #only major
+        test_keys={key for key in test_keys if 'm' not in key}
+    if add_mode and not mode: #only minor
+        test_keys={key for key in test_keys if 'm' in key}
+
+    scores=test_chords(test_keys,songs[songid],chords,clf_major,clf_minor,first=False,last=False)
+    
     if 'm' in label: #minor key
         abs_scores=test_song(songs[songid],chords,clf_abs,chromatic,first=False,last=False)
     else: #major key
         abs_scores=test_song(songs[songid],chords,clf_abs,chromatic,first=False,last=False)
     #print(sorted(abs_scores))
     #print(max(abs_scores),label)
-
-    #prediction=max(scores)[1]
-
+    
+    #try:
+    #    prediction=max(scores)[1]
+    #except:
+    #    print(songs[songid],mode,scores,test_keys)
+    #    exit()
+    
     #alternate test: combine absolute classifier with relative classifier
     rel_rank=[chords[score[1]] for score in scores]
     abs_rank=[chords[score[1]] for score in abs_scores]
@@ -517,7 +547,6 @@ print("number correct: ",correct)
 print("accuracy: ",correct/len(test))
                       
 
-
 #run Decision Tree classifier
 #clf=tree.DecisionTreeClassifier().fit(X_train,Y_train)
 #export to Graphviz so that we can visualize the tree
@@ -529,3 +558,4 @@ if False:
     graph=pydotplus.graph_from_dot_data(dot_data)
     graph.write_pdf("dt_keys_relative.pdf")
 #print(clf.score(X_test,Y_test))
+'''
