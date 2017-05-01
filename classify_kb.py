@@ -2,7 +2,7 @@
 import pickle
 from sklearn.model_selection import train_test_split,cross_val_score,GridSearchCV
 from sklearn import svm,tree
-import pydotplus
+#import pydotplus
 import random
 
 def generate_features(songs,matches,chords,first=False,last=False,relative=False,major=False,minor=False):

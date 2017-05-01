@@ -240,15 +240,25 @@ def run(user_input):
     # user feedback on possible keys
     print("--------------------------------\nSome possible keys were found.")
     possible_key = [x for x in possible_key if input("Keep " + x + '?: (Y/N) ').lower() == 'y'] # ask which keys the user wants to keep
-    if input("Would you like to add any? (Y/N) ").lower() == 'y': # if user wants to add some
+    #if input("Would you like to add a key? (Y/N) ").lower() == 'y': # if user wants to add some
+        # key = input('What key would you like to add? (<key>/<blank>) ') # ask user for key or blank
+        # if type(key) == str and key.lower() == 'exit': exit() # exit() requested by user
+        # while key: # if key given
+        #     if check_valid(key):
+        #         possible_key.append(key) # if valid key, append to possible key list
+        #     else: print(str(key) + ' is not a valid key') # if not valid, say its not valid
+        #     key = input('What key would you like to add? (<key>/<blank>) ') # ask user again
+        #     if type(key) == str and key.lower() == 'exit': exit() # exit() requested by user
+        #     possible_key.append(key) # append the key to the list
+
+    while input("Would you like to add a key? (Y/N) ").lower() == 'y': # if user wants to add some
         key = input('What key would you like to add? (<key>/<blank>) ') # ask user for key or blank
         if type(key) == str and key.lower() == 'exit': exit() # exit() requested by user
-        while key: # if key given
-            if check_valid(key):possible_key.append(key) # if valid key, append to possible key list
-            else: print(str(key) + ' is not a valid key') # if not valid, say its not valid
-            key = input('What key would you like to add? (<key>/<blank>) ') # ask user again
-            if type(key) == str and key.lower() == 'exit': exit() # exit() requested by user
-            possible_key.append(key) # append the key to the list
+        if check_valid(key): 
+            possible_key.append(key) # if valid key, append to possible key list
+            continue
+        else: print(str(key) + ' is not a valid key') # if not valid, say its not valid
+
 
     # get creative values
     creativity = None # set default value
@@ -278,11 +288,13 @@ def run(user_input):
     similar = collections.Counter({i: similar[i] / float(len(similar_suggestions)) for i in similar.keys()}) # conver to proportions
     creative = collections.Counter(creative_suggestions) # get count dict of creative suggestions
     creative = collections.Counter({i: creative[i] / float(len(creative_suggestions)) for i in creative.keys()}) # convert to proportions
-    similar = collections.Counter({x:(1-creativity)*y for x,y in similar.items()}) # scale similar by (1 - creativity)
-    creative = collections.Counter({x:creativity*y for x,y in creative.items()}) # scale creative by (creativity)
+    
+    if (similar and creative):
+        similar = collections.Counter({x:(1-creativity)*y for x,y in similar.items()}) # scale similar by (1 - creativity)
+        creative = collections.Counter({x:creativity*y for x,y in creative.items()}) # scale creative by (creativity)
     total_suggestions = creative+similar # sum count dicts
 
-
+    if not total_suggestions: return 'No more suggestions.' #return if no suggestions to give
     # return suggestion by choosing randomly with probability proportion
     # convert chromatic to chord
     # if multiple chords, check which one appers most frequently in the possible keys
@@ -302,7 +314,7 @@ def run(user_input):
         if response == 'y': # if user wants the chord
             return user_input + [value] # append new chord to user inputted chords
 
-    return 'No more suggestions left.' # return string of no suggestions available
+    return 'No more suggestions.' # return string of no suggestions available
 
 
 
